@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────────
+// Lead — central record for every soldier inquiry
+// ─────────────────────────────────────────────
+model Lead {
+  id        String     @id @default(cuid())
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Contact
+  name      String
+  phone     String
+  email     String
+
+  // Move info (captured at intake, rough)
+  moveDate  String?    // free text at intake ("June 2025")
+  route     String?    // e.g. "Fort Bragg, NC → Fort Lewis, WA"
+
+  // Pipeline
+  status    LeadStatus @default(NEW)
+
+  // Agent assignment (denormalized for speed — agentId lives here)
+  agentId   String?
+  agent     User?      @relation(fields: [agentId], references: [id])
+
+  // Assignment history (each time agent changes, a row is written)
+  assignments Assignment[]
+
+  @@index([status])
+  @@index([agentId])
+}
+
+enum LeadStatus {
+  NEW
+  ASSIGNED
+  CONTACTED
+  RESERVED
+  COMPLETED
+  CLOSED
+}
+
+// ─────────────────────────────────────────────
+// User — agents and admins (not soldiers)
+// ─────────────────────────────────────────────
+model User {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  email     String   @unique
+  name      String
+  phone     String?
+  role      Role     @default(AGENT)
+  active    Boolean  @default(true)
+
+  leads       Lead[]
+  assignments Assignment[]
+}
+
+enum Role {
+  ADMIN
+  AGENT
+}
+
+// ─────────────────────────────────────────────
+// Assignment — log of who was assigned when
+// (agentId on Lead is the current owner;
+//  this table is the audit trail)
+// ─────────────────────────────────────────────
+model Assignment {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+
+  lead       Lead     @relation(fields: [leadId], references: [id])
+  leadId     String
+
+  agent      User     @relation(fields: [agentId], references: [id])
+  agentId    String
+}
